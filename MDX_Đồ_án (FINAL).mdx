@@ -1,0 +1,204 @@
+﻿-- MDX MODIFIED 14/12/2025
+-- 1. Tổng số Impression theo nền tảng quảng cáo (CHART IN REPORT)
+SELECT
+    {[Measures].[Fact Events Count]} ON COLUMNS,
+    {[Dim Ads].[Ad Platform].MEMBERS} ON ROWS
+FROM [Final OLAP]
+WHERE ([Event Type].[Event Type].&[Impression]);
+
+-- 2. Số Click theo nhóm tuổi người dùng (MATRIX IN REPORT)
+SELECT
+    [Measures].[Fact Events Count] ON COLUMNS,
+    [Dim Users].[Age Group].MEMBERS ON ROWS
+FROM [Final OLAP]
+WHERE ([Event Type].[Event Type].&[Click]);
+
+-- 3. Hiệu quả chiến dịch: số Purchase theo Campaign
+SELECT
+    [Measures].[Fact Events Count] ON COLUMNS,
+    [Dim Campaigns].[Name].MEMBERS ON ROWS
+FROM [Final OLAP]
+WHERE ([Event Type].[Event Type].&[Purchase]);
+
+-- 4. Hành vi người dùng theo thời gian trong ngày (Time of Day)
+SELECT
+    [Measures].[Fact Events Count] ON COLUMNS,
+    [Dim Time].[Time Of Day].MEMBERS ON ROWS
+FROM [Final OLAP];
+
+-- Thầy Kha hỏi
+-- Thống kê theo năm có tháng nào, 
+--với mỗi tháng thống kê số chiến dịch theo tháng, năm
+SELECT 
+    {[Measures].[Fact Events Count]} ON COLUMNS,
+    NON EMPTY 
+    ( -- [Dim Time].[Year].[Year] là ra tất cả (ALL)
+        [Dim Time].[Year].ALLMEMBERS
+        * [Dim Time].[Month].ALLMEMBERS
+        * [Dim Campaigns].[Name].[Name].ALLMEMBERS
+		-- Thêm cấp độ Campaign Name
+    ) ON ROWS
+FROM [Final OLAP];
+
+-- Thống kê tổng số chiến dịch theo từng tháng trong mỗi năm
+-- Lấy 2 thấng có tổng số chiến dịch cao nhất
+SELECT
+    [Measures].[Fact Events Count] ON COLUMNS,
+    NON EMPTY
+    TOPCOUNT(
+        [Dim Time].[Month].[Month].MEMBERS *
+		[Dim Campaigns].[name].MEMBERS
+		,2,
+		[Measures].[Fact Events Count]
+    ) ON ROWS
+FROM [Final OLAP]
+WHERE [Dim Time].[Year].&[2025];
+
+-- Thống kê tổng số chiến dịch theo từng tháng trong mỗi năm
+SELECT
+    {[Measures].[Fact Events Count]} ON COLUMNS,
+    NON EMPTY
+    ORDER(
+        [Dim Time].[Year].[Year].MEMBERS *
+        [Dim Time].[Month].[Month].MEMBERS *
+        [Dim Campaigns].[name].MEMBERS,
+        [Measures].[Fact Events Count], 
+        DESC 
+    ) ON ROWS
+FROM [Final OLAP];
+
+-- Thống kê số chiến dịch có doanh thu cao nhất theo từng tháng
+-- Bị sai cái này TOPCOUNT??
+SELECT 
+    NON EMPTY [Measures].[Fact Events Count] ON COLUMNS,
+    NON EMPTY
+    TOPCOUNT
+    (
+        (
+            [Dim Time].[Month].[Month].MEMBERS *
+            [Dim Time].[Day Of Month].[Day Of Month].MEMBERS *
+            [Dim Campaigns].[name].[name].MEMBERS
+        ),
+        3,
+        [Measures].[Fact Events Count]
+    ) ON ROWS
+FROM [Final OLAP];
+-- Lúc này t đổi para lấy top 3 thành top 2 cái cô Phụng hỏi 
+-- => đúng là phải ra kết quả như câu truy vấn dưới
+
+-- Cô Phụng hỏi sau khi thầy Kha đã accept:
+-- Thong ke voi moi thang, tim 2 ngay co so chien dich cao nhat
+SELECT 
+    NON EMPTY {[Measures].[Fact Events Count]} ON COLUMNS, 
+    NON EMPTY 
+    GENERATE(	
+        [Dim Time].[Month].[Month].MEMBERS, 
+        TOPCOUNT(
+            [Dim Time].[Month].CurrentMember 
+			* [Dim Time].[Day Of Month].[Day Of Month].MEMBERS, 
+            2, -- Lấy ra 2 ngày cao nhất trong từng tháng
+            [Measures].[Fact Events Count] 
+        )
+    ) ON ROWS 
+FROM [Final OLAP];
+
+
+-- 5. So sánh Impression giữa ngày thường và cuối tuần
+SELECT
+    [Measures].[Fact Events Count] ON COLUMNS,
+    [Dim Time].[Is Weekend].MEMBERS ON ROWS
+FROM [Final OLAP]
+WHERE ([Event Type].[Event Type].&[Impression]);
+
+-- LỒNG THÊM CÁC HÀM ĐÃ HỌC
+-- Câu 1 lồng HAVING
+-- Câu 2 lồng TOPCOUNT tìm theo nhóm tuổi tương tác cao nhất
+-- Câu 3 lồng FILTER
+-- Câu 4 lồng ROLL UP, DRILL DOWN
+-- Câu 5 lồng SLICE AND DICE
+-- Thêm 1 câu (câu 6) MDX sử dụng hàm GENERATE
+
+
+-- SAU KHI ĐÃ LỒNG THÊM HÀM
+-- 1. Tổng số Impression > 10000 theo nền tảng quảng cáo (HAVING, FILTER)
+SELECT
+    {[Measures].[Fact Events Count]} ON COLUMNS,
+    FILTER(
+		{[Dim Ads].[Ad Platform].MEMBERS *
+			[Dim Time].[Time Of Day].ALLMEMBERS},
+			([Measures].[Fact Events Count],
+				[Event Type].[Event Type].&[Impression]) > 60000
+		)
+	--HAVING [Measures].[Fact Events Count] > 60000
+ON ROWS 
+FROM [Final OLAP]
+WHERE ([Event Type].[Event Type].&[Impression]);
+
+-- ALLMEMBERS vs MEMBERS 
+-- HAVING vs FILTER
+
+-- 2. Top nhóm tuổi (Age Group) có số click cao nhất
+SELECT 
+    [Measures].[Fact Events Count] ON COLUMNS,
+    TOPCOUNT(
+		[Dim Users].[Age Group].MEMBERS, 
+		4,
+		[Measures].[Fact Events Count]
+	)
+	ON ROWS
+FROM [Final OLAP]
+WHERE ([Event Type].[Event Type].&[Click]);
+
+-- 3. Hiệu quả chiến dịch: số Purchase theo Campaign (HAVING, FILTER)
+SELECT
+    [Measures].[Fact Events Count] ON COLUMNS,
+    FILTER(
+		{[Dim Campaigns].[Name].MEMBERS},
+		([Measures].[Fact Events Count],
+				[Event Type].[Event Type].&[Purchase]) > 50
+	)
+	ON ROWS
+FROM [Final OLAP]
+WHERE ([Event Type].[Event Type].&[Purchase]);
+-- Lỗi khi đưa tham số trong hàm FILTER
+-- The Tuple function expects a tuple set expression for the 2 argument. 
+-- A string or numeric expression was used.
+
+-- 4. Hành vi người dùng theo cụ thê từng thời gian 
+--trong ngày (Time of Day) và trong tuần (Day Of Week)
+SELECT
+    [Measures].[Fact Events Count] ON COLUMNS,
+    CROSSJOIN(
+		[Dim Time].[Time Of Day].MEMBERS, 
+		[Dim Time].[Day Of Week].MEMBERS
+		) ON ROWS
+FROM [Final OLAP];
+
+-- 5. So sánh Impression giữa ngày thường và cuối tuần
+SELECT
+    [Measures].[Fact Events Count] ON COLUMNS,
+	[Dim Time].[Is Weekend].MEMBERS ON ROWS
+FROM [Final OLAP]
+WHERE (
+	[Event Type].[Event Type].&[Impression]--,
+	--[Dim Time].[Is Weekend].&[0]
+);
+
+-- 6. Xem Like theo từng Campaign và từng nền tảng quảng cáo 
+-- GENERATE function 
+SELECT
+    [Measures].[Fact Events Count] ON 0,
+    GENERATE(
+        [Dim Campaigns].[Name].MEMBERS,
+        [Dim Ads].[Ad Platform].MEMBERS
+    ) ON 1
+FROM [Final OLAP]
+WHERE ([Event Type].[Event Type].&[Like]);
+
+--	 Không thể đưa cả [Dim Time].[Is Weekend].&[1] (phải là giá trị 0, 1 do 
+-- không phải BOOLEAN(TRUE, FALSE) 
+-- mà là varchar) ở WHERE clause và
+-- [Dim Time].[Is Weekend].MEMBERS ON ROWS vào chung query được.
+-- The Is Weekend hierarchy already appears in the Axis1 axis.
+-- SLICE: chỉ lấy Impression
+-- DICE: so sánh Yes / No (Weekend vs Weekday)
